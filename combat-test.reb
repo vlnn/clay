@@ -15,7 +15,7 @@ check [fire] = groups/2/immune "group 2 immune to fire"
 
 check 5216 = day24/part-one "part one: winner ends with 5216 units"
 
-day24/boost-by 1570
+day24/rearm-with 1570
 day24/fight-the-battle
 check day24/the-immune-system-won? "boost 1570: the immune system wins"
 check 51 = day24/count-the-survivors "boost 1570 leaves 51 units"
