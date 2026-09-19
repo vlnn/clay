@@ -1,82 +1,28 @@
 Rebol [
-    Title:   "Glossary - a top-down dialect, v2"
+    Title:   "Glossary - a top-down dialect, v3"
     Purpose: {A glossary is a block of definitions read top to bottom.
               The first entry is the table of contents; every later entry
               must define a phrase some earlier body has already used
-              (the use-before-define law). A phrase name may span several
-              words: bodies write `fight the battle`, the definition is
-              `fight-the-battle:`, and the compiler joins the longest
-              matching run (no meaning is ever silently dropped). Only a
-              small closed set of English function words is decorative.
-              `example:` entries sit at a phrase's first mention and run
-              as tests after the glossary loads. Words that no definition
-              or primitive ever answers are a compile error: an
-              unfulfilled wish.}
+              (the use-before-define law). Phrase names are kebab-case
+              and bodies spell them exactly as defined, so every phrase
+              has one grep-able spelling and nothing is ever rewritten
+              or dropped. Argument specs may read as sentence templates:
+              [from an attacker to a defender] declares attacker and
+              defender. `example:` entries sit at a phrase's first
+              mention and run as tests after the glossary loads. Words
+              that no definition or primitive ever answers are a
+              compile-time error: an unfulfilled wish. glossary-print
+              renders the source as prose for review.}
 ]
 
-function-words: [the a an of to by in with and or then its their from for at on]
+template-words: [the a an of to by in with from for at on some]
 example-links:  [is are]
 
 glossary-failures: 0
 
-phrase-tokens: func [name /local parts][
-    parts: copy []
-    foreach s split to string! name #"-" [append parts to word! s]
-    parts
-]
-
-glossary-munch: func [blk table longest /local out i k run cand joined v][
+template-args: func [spec /local out w][
     out: copy []
-    i: 1
-    while [i <= length? blk][
-        v: pick blk i
-        case [
-            word? v [
-                k: min longest (1 + (length? blk) - i)
-                cand: none
-                while [all [none? cand  k >= 2]][
-                    run: copy/part at blk i k
-                    if parse run [some word!][
-                        joined: attempt [to word! form-phrase run]
-                        if all [joined  find table joined][cand: joined]
-                    ]
-                    k: k - 1
-                ]
-                either cand [
-                    append out cand
-                    i: i + length? phrase-tokens cand
-                ][
-                    append out v
-                    i: i + 1
-                ]
-            ]
-            block? v [append/only out glossary-munch v table longest  i: i + 1]
-            paren? v [
-                append/only out to paren! glossary-munch to block! v table longest
-                i: i + 1
-            ]
-            true [append/only out v  i: i + 1]
-        ]
-    ]
-    out
-]
-
-form-phrase: func [run /local s][
-    s: copy ""
-    foreach w run [append s to string! w  append s "-"]
-    head remove back tail s
-]
-
-glossary-strip: func [blk /local out v][
-    out: copy []
-    foreach v blk [
-        case [
-            all [word? v  find function-words v] []
-            block? v [append/only out glossary-strip v]
-            paren? v [append/only out to paren! glossary-strip to block! v]
-            true     [append/only out v]
-        ]
-    ]
+    foreach w spec [unless find template-words w [append out w]]
     out
 ]
 
@@ -118,8 +64,8 @@ run-example: func [subject body ctx /local pos left right expect got][
         glossary-failures: glossary-failures + 1
         exit
     ]
-    left:  glossary-strip copy/part body pos
-    right: glossary-strip next pos
+    left:  copy/part body pos
+    right: copy next pos
     set/any 'got try [do bind/copy left ctx]
     expect: either 1 = length? right [first right][do bind/copy right ctx]
     case [
@@ -136,12 +82,7 @@ run-example: func [subject body ctx /local pos left right expect got][
     ]
 ]
 
-glossary: func [
-    defs [block!]
-    /local entries name b1 b2 wished defined stripped all-locals locals
-           table longest examples spec body bound i argspec msg wrapped
-           subject munched ctx e w v wish-origin prev n0
-][
+glossary-entries: func [defs /local entries name b1 b2][
     entries: copy []
     parse defs [some [
         set name set-word! (b2: none)
@@ -151,39 +92,35 @@ glossary: func [
             either b2 [b1][copy []]
             either b2 [b2][b1]])
     ]]
+    entries
+]
 
-    table: copy []  longest: 1
-    foreach e entries [
-        unless 'example = first e [
-            append table first e
-            longest: max longest length? phrase-tokens first e
-        ]
-    ]
-    foreach w table [
-        if find function-words w [
-            do make error! ajoin [
-                "Glossary law: '" w "' is a function word and cannot be defined"]
-        ]
-    ]
+glossary: func [
+    defs [block!]
+    /local entries name wished defined stripped all-locals locals
+           table examples spec body bound i argspec msg wrapped
+           subject ctx e w v wish-origin prev n0
+][
+    entries: glossary-entries defs
 
-    wished: copy []  defined: copy []  stripped: copy []
-    all-locals: copy []  examples: copy []
+    table: copy []
+    foreach e entries [unless 'example = first e [append table first e]]
+
+    wished: copy []  defined: copy []  all-locals: copy []  examples: copy []
     wish-origin: copy []  prev: none
     foreach e entries [
         set [name argspec body] e
-        munched: glossary-munch body table longest
         either name = 'example [
             subject: none
-            foreach v munched [
+            foreach v body [
                 if all [none? subject  word? v  find table v  not find defined v
                         prev = select wish-origin v][
                     subject: v]
             ]
             n0: length? wished
-            glossary-wishes glossary-strip munched copy [] wished
+            glossary-wishes body copy [] wished
             foreach w skip wished n0 [append wish-origin reduce [w prev]]
-            append/only examples reduce [any [subject prev "..."] munched]
-            append/only stripped none
+            append/only examples reduce [any [subject prev "..."] body]
             append/only all-locals none
         ][
             unless any [empty? defined  find wished name][
@@ -191,9 +128,7 @@ glossary: func [
                     "Glossary law: '" name "' is defined before anything wished for it"]
             ]
             append defined name
-            body: glossary-strip munched
-            append/only stripped body
-            locals: glossary-strip argspec
+            locals: template-args argspec
             n0: length? wished
             glossary-wishes body locals wished
             foreach w skip wished n0 [append wish-origin reduce [w name]]
@@ -216,7 +151,7 @@ glossary: func [
     repeat i length? entries [
         set [name argspec body] pick entries i
         if name = 'example [continue]
-        bound: bind/copy pick stripped i ctx
+        bound: bind/copy body ctx
         msg: ajoin ["in '" name "':"]
         wrapped: compose/only [
             set/any 'glossary-err try (bound)
@@ -227,7 +162,7 @@ glossary: func [
                 get/any 'glossary-err
             ]
         ]
-        spec: glossary-strip argspec
+        spec: template-args argspec
         locals: exclude unique any [pick all-locals i copy []] spec
         unless empty? locals [append spec /local  append spec locals]
         set in ctx name func spec wrapped
@@ -239,6 +174,50 @@ glossary: func [
 ]
 
 disarm-safe: func [e][reduce [e/id e/arg1]]
+
+;; ------------------------------------------------------------- the printer
+
+spaced: func [w][replace/all form w "-" " "]
+
+render-prose: func [blk table /local out v s][
+    out: copy ""
+    foreach v blk [
+        s: case [
+            all [word? v  find table v][spaced v]
+            any [set-word? v  set-path? v][mold v]
+            lit-word? v [form v]
+            block? v  [ajoin ["[" render-prose v table "]"]]
+            paren? v  [ajoin ["(" render-prose to block! v table ")"]]
+            string? v [mold v]
+            true      [form v]
+        ]
+        unless empty? out [append out " "]
+        append out s
+    ]
+    out
+]
+
+glossary-print: func [defs /local entries table e name argspec body out][
+    entries: glossary-entries defs
+    table: copy []
+    foreach e entries [unless 'example = first e [append table first e]]
+    out: copy ""
+    foreach e entries [
+        set [name argspec body] e
+        append out either name = 'example [
+            ajoin ["    e.g. " render-prose body table "^/"]
+        ][
+            ajoin [
+                spaced name
+                either empty? argspec [""][ajoin [" (" render-prose argspec table ")"]]
+                ":^/    " render-prose body table "^/"
+            ]
+        ]
+    ]
+    out
+]
+
+;; ------------------------------------------------- ordering & small helpers
 
 whole: func [x][to integer! x]
 
