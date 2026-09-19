@@ -1,7 +1,6 @@
 ; AoC 2018 day 24, as a clay tablet.
-; The law: every phrase is used before it is defined,
-; and each example sits at its subject's first mention.
-; Primitives from the host: groups, originals, ranked, pick-max, whole.
+
+primitives: [groups originals ranked pick-max whole]
 
 answers: [part-one part-two]
 example: [part-one is 5216]
@@ -38,7 +37,7 @@ choose-targets: [
 ]
 doc: "Each living group, strongest first, claims the unclaimed enemy with the best appeal; a group that can hurt nobody claims none."
 
-strike: [an attacker][
+strike: [an Attacker][
     defender: attacker/claim
     if any [none? defender  attacker/units <= 0][return 0]
     kills: min defender/units  whole (hurt attacker defender) / defender/hp
@@ -48,16 +47,16 @@ strike: [an attacker][
 example: [restore-the-armies  hurt group 1 group 4 is twice power group 1]
 example: [restore-the-armies  hurt group 1 group 2 is 0]
 
-best-target-for: [an attacker][
+best-target-for: [an Attacker][
     pick-max hittable-enemies-of attacker  func [d][appeal-of attacker d]
 ]
 
-appeal-of: [an attacker to a defender][
+appeal-of: [an Attacker to a Defender][
     reduce [hurt attacker defender  power defender  initiative defender]
 ]
 doc: "Target preference: most hurt dealt, then defender power, then defender initiative."
 
-hittable-enemies-of: [an attacker][
+hittable-enemies-of: [an Attacker][
     pool: copy []
     foreach d groups [
         if all [d/units > 0
@@ -67,7 +66,7 @@ hittable-enemies-of: [an attacker][
     pool
 ]
 
-hurt: [from an attacker to a defender][
+hurt: [from an Attacker to a Defender][
     if find defender/immune attacker/element [return 0]
     either find defender/weak attacker/element
         [2 * power attacker]
@@ -75,10 +74,10 @@ hurt: [from an attacker to a defender][
 ]
 doc: "Damage one whole group deals another: its effective power, doubled by weakness, cancelled by immunity."
 
-power: [a group-of-units][group-of-units/units * group-of-units/damage]
+power: [a Group-of-units][group-of-units/units * group-of-units/damage]
 example: [restore-the-armies  power group 4 is 53820]
 
-initiative: [a group-of-units][group-of-units/init]
+initiative: [a Group-of-units][group-of-units/init]
 
 the-living: [
     pool: copy []
@@ -87,8 +86,8 @@ the-living: [
 ]
 
 the-war-is-over?: [any [wiped-out? 'immune  wiped-out? 'infection]]
-wiped-out?: [a side][zero? units-of side]
-units-of: [a side][
+wiped-out?: [a Side][zero? units-of side]
+units-of: [a Side][
     n: 0
     foreach g groups [if g/side = side [n: n + g/units]]
     n
@@ -98,7 +97,7 @@ count-the-survivors: [(units-of 'immune) + units-of 'infection]
 restore-the-armies:  [foreach [g u d] originals [g/units: u  g/damage: d]]
 example: [fight-the-battle  restore-the-armies  the-units are [17 989 801 4485]]
 
-rearm-with: [a bonus][
+rearm-with: [a Bonus][
     restore-the-armies
     foreach g groups [if g/side = 'immune [g/damage: g/damage + bonus]]
 ]
@@ -115,8 +114,8 @@ the-immune-system-won?: [
     all [not wiped-out? 'immune  wiped-out? 'infection]
 ]
 
-group:     [i][pick groups i]
-twice:     [a number][2 * number]
+group:     [an Index][pick groups index]
+twice:     [a Number][2 * number]
 the-units: [
     u: copy []
     foreach g groups [append u g/units]

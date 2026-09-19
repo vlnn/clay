@@ -1,45 +1,71 @@
 Rebol [
     Title:   "Clay - a top-down tablet language"
     Purpose: {A .clay file is a tablet: one bounded page of definitions
-              read top to bottom. The first entry is the incipit; every
-              later entry must define a phrase some earlier body has
-              already used (the law: wish before define). Phrase names
-              are kebab-case and bodies spell them exactly as defined.
-              Argument specs may read as sentence templates:
-              [from an attacker to a defender] declares attacker and
-              defender. doc: entries document the definition just above
-              and surface through the host's native help. example:
-              entries sit at a phrase's first mention or definition.
-              Loading a tablet fires it in the kiln: every example runs,
-              and failures are cracks. clay/soft skips the firing while
-              a piece is still being shaped. Words that no definition or
-              primitive ever answers are a compile-time error: an
-              unfulfilled wish.
-              A tablet is loaded with:  clay load %some.clay}
+              read top to bottom under the law - pledge before define.
+              Loading fires every example in the kiln; failures are
+              cracks, counted on the returned context (ctx/clay-cracks).
+              A tablet is loaded with:  clay load %some.clay
+              The README tells the rest.}
 ]
 
-template-words: [the a an of to by in with from for at on some]
-example-links:  [is are]
+example-links: [is are]
 
-cracks: 0
+capitalized?: function [w][
+    ch: first form w
+    all [ch >= #"A"  ch <= #"Z"]
+]
 
 template-args: function [spec][
-    collect [foreach w spec [unless find template-words w [keep w]]]
+    collect [
+        foreach w spec [
+            if all [word? w  capitalized? w][keep to word! lowercase form w]]
+    ]
 ]
 
-clay-entries: func [defs /local name b1 b2 s][
+mentions?: function [blk w][
+    foreach v blk [
+        case [
+            all [any-word? v  w = to word! v][return true]
+            any [path? v  set-path? v][
+                if mentions? to block! v w [return true]]
+            any [block? v  paren? v][
+                if mentions? to block! v w [return true]]
+        ]
+    ]
+    false
+]
+
+lowercase!: function [name body][
+    foreach v body [
+        case [
+            all [any-word? v  capitalized? v][
+                do make error! ajoin [
+                    "Clay body: '" name "' spells '" v
+                    "' with a capital; bodies are lowercase"]
+            ]
+            any [path? v  set-path? v  block? v  paren? v][
+                lowercase! name to block! v]
+        ]
+    ]
+]
+
+clay-entries: func [defs /local name b1 b2 s mark][
     collect [
-        parse defs [some [
+        unless parse defs [some [
+            mark:
             set name set-word! (b2: none  s: none)
             [set s string! | set b1 block! opt [set b2 block!]]
             (keep to word! name
              keep/only either b2 [b1][copy []]
              either s [keep s][keep/only either b2 [b2][b1]])
-        ]]
+        ]][
+            do make error! ajoin [
+                "Clay entry malformed near: " mold copy/part mark 3]
+        ]
     ]
 ]
 
-clay-wishes: function [body locals wished][
+clay-pledges: function [body locals pledged][
     walk: func [blk /local v w][
         forall blk [
             v: blk/1
@@ -47,7 +73,8 @@ clay-wishes: function [body locals wished][
                 set-word? v [append locals to word! v]
                 any [lit-word? v refinement? v] []
                 all [word? v  find example-links v] []
-                all [word? v  find [foreach func function does] v][
+                all [word? v  find [foreach repeat for map-each remove-each
+                                    func function does] v][
                     w: pick blk 2
                     case [
                         word? w  [append locals w]
@@ -55,12 +82,12 @@ clay-wishes: function [body locals wished][
                     ]
                 ]
                 word? v [
-                    unless any [find locals v  find wished v][append wished v]
+                    unless any [find locals v  find pledged v][append pledged v]
                 ]
                 any [path? v  set-path? v][
                     w: first v
-                    if all [word? w  not find locals w  not find wished w][
-                        append wished w
+                    if all [word? w  not find locals w  not find pledged w][
+                        append pledged w
                     ]
                 ]
                 any [block? v  paren? v][walk to block! v]
@@ -73,10 +100,6 @@ clay-wishes: function [body locals wished][
 fire-example: function [subject body ctx][
     got: none
     pos: any [find body 'is  find body 'are]
-    unless pos [
-        print ajoin ["CRACK (" subject "): no 'is'/'are' assertion"]
-        return false
-    ]
     left:  copy/part body pos
     right: copy next pos
     set/any 'got try [do bind/copy left ctx]
@@ -113,13 +136,25 @@ clay: function [
 
     table: collect [
         foreach [name argspec body] entries [
-            unless any [name = 'example  string? body][keep name]]
+            unless any [name = 'example  name = 'primitives  string? body][
+                keep name]]
     ]
 
-    wished: copy []  defined: copy []  all-locals: copy []  examples: copy []
-    wish-origin: copy []  prev: none  docs: copy []
+    pledged: copy []  defined: copy []  all-locals: copy []  examples: copy []
+    pledge-origin: copy []  prev: none  docs: copy []  prims: none
     foreach [name argspec body] entries [
         case [
+            name = 'primitives [
+                if prims [do make error! "primitives: is declared twice"]
+                unless empty? defined [
+                    do make error! "primitives: must precede the incipit"
+                ]
+                unless parse body [any word!][
+                    do make error! "primitives: takes a block of words"
+                ]
+                prims: body
+                append/only all-locals none
+            ]
             string? body [
                 unless name = 'doc [
                     do make error! ajoin [
@@ -135,50 +170,92 @@ clay: function [
                 append/only all-locals none
             ]
             name = 'example [
+                unless any [find body 'is  find body 'are][
+                    do make error! ajoin [
+                        "example has no 'is'/'are' assertion: " mold body]
+                ]
+                lowercase! name body
                 subject: none
                 if all [prev  find body prev][subject: prev]
                 foreach v body [
                     if all [none? subject  word? v  find table v
                             not find defined v
-                            prev = select wish-origin v][
+                            prev = select pledge-origin v][
                         subject: v]
                 ]
-                n0: length? wished
-                clay-wishes body copy [] wished
-                foreach w skip wished n0 [append wish-origin reduce [w prev]]
+                n0: length? pledged
+                clay-pledges body copy [] pledged
+                foreach w skip pledged n0 [append pledge-origin reduce [w prev]]
                 append examples any [subject prev "..."]
                 append/only examples body
                 append/only all-locals none
             ]
             true [
-                unless any [empty? defined  find wished name][
+                if find defined name [
+                    do make error! ajoin ["'" name "' is defined twice"]
+                ]
+                unless any [empty? defined  find pledged name][
                     do make error! ajoin [
-                        "Clay law: '" name "' is defined before anything wished for it"]
+                        "Clay law: '" name "' is defined before anything pledged it"]
                 ]
                 append defined name
                 locals: template-args argspec
-                n0: length? wished
-                clay-wishes body locals wished
-                foreach w skip wished n0 [append wish-origin reduce [w name]]
+                unless any [empty? argspec  not empty? locals][
+                    do make error! ajoin [
+                        "Clay spec: '" name "' has a sentence with no Nouns: "
+                        mold argspec]
+                ]
+                foreach a locals [
+                    unless mentions? body a [
+                        do make error! ajoin [
+                            "Clay spec: '" name "' declares a stray Noun: '" a "'"]
+                    ]
+                ]
+                lowercase! name body
+                n0: length? pledged
+                clay-pledges body locals pledged
+                foreach w skip pledged n0 [append pledge-origin reduce [w name]]
                 append/only all-locals locals
                 prev: name
             ]
         ]
     ]
-    foreach w wished [
-        unless any [find defined w  value? w  find [return break continue] w][
-            do make error! ajoin [
-                "Unfulfilled wish: '" w "' is used but never defined"]
+    if prims [
+        foreach w prims [
+            unless value? w [
+                do make error! ajoin [
+                    "Primitive '" w "' is not provided by the host"]
+            ]
+        ]
+    ]
+    foreach w pledged [
+        case [
+            any [find defined w  find [return break continue] w][]
+            not value? w [
+                origin: select pledge-origin w
+                do make error! ajoin [
+                    "Unfulfilled pledge: '" w "' is used but never defined"
+                    either origin [
+                        ajoin [" (first pledged in '" origin "')"]][""]]
+            ]
+            all [prims  shared-state? get w  not find prims w][
+                do make error! ajoin [
+                    "Undeclared shared state: '" w
+                    "' is missing from the primitives: entry"]
+            ]
         ]
     ]
 
-    ctx: make object! append collect [foreach w defined [keep to set-word! w]] none
+    ctx: make object! append collect [
+        foreach w defined [keep to set-word! w]
+        keep to set-word! 'clay-cracks
+    ] none
 
     foreach [name argspec body] entries [
         locals: take all-locals
-        if any [name = 'example  string? body][continue]
+        if any [name = 'example  name = 'primitives  string? body][continue]
         msg: ajoin ["in '" name "':"]
-        wrapped: compose/only [
+        wrapped: compose/deep/only [
             set/any 'clay-err try (bind/copy body ctx)
             either error? get/any 'clay-err [
                 print [(msg) mold cracked-open get/any 'clay-err]
@@ -188,17 +265,20 @@ clay: function [
             ]
         ]
         spec: template-args argspec
-        locals: exclude unique locals spec
-        unless empty? locals [append spec /local  append spec locals]
+        locals: exclude unique append locals 'clay-err spec
+        append spec /local
+        append spec locals
         if d: select docs name [insert spec d]
         set in ctx name func spec wrapped
     ]
 
-    set 'cracks either soft [0][kiln examples ctx]
+    ctx/clay-cracks: either soft [0][kiln examples ctx]
     ctx
 ]
 
-cracked-open: func [e][reduce [e/id e/arg1]]
+shared-state?: func [v [any-type!]][any [series? :v  object? :v  map? :v]]
+
+cracked-open: func [e][reduce [e/id e/arg1 e/near]]
 
 ;; ------------------------------------------------- ordering & small helpers
 
