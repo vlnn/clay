@@ -77,7 +77,9 @@ run-example: function [subject body ctx][
     left:  copy/part body pos
     right: copy next pos
     set/any 'got try [do bind/copy left ctx]
-    expect: either 1 = length? right [first right][do bind/copy right ctx]
+    expect: either all [1 = length? right  block? first right]
+        [first right]
+        [do bind/copy right ctx]
     case [
         error? get/any 'got [
             print ajoin ["FAIL example (" subject "): " mold get/any 'got]
@@ -120,6 +122,7 @@ glossary: function [defs [block!]][
             ]
             name = 'example [
             subject: none
+            if all [prev  find body prev][subject: prev]
             foreach v body [
                 if all [none? subject  word? v  find table v  not find defined v
                         prev = select wish-origin v][

@@ -14,6 +14,7 @@ fight-the-battle: [
     until [any [the-war-is-over?  zero? casualties-in-a-round]]
 ]
 doc: "Rounds continue until one army is empty or a round kills nobody; a stalemate is not a victory."
+example: [restore-the-armies  fight-the-battle  the-war-is-over? is true]
 example: [
     restore-the-armies  casualties-in-a-round
     the-units are [0 905 797 4434]
@@ -95,6 +96,7 @@ units-of: [a side][
 
 count-the-survivors: [(units-of 'immune) + units-of 'infection]
 restore-the-armies:  [foreach [g u d] originals [g/units: u  g/damage: d]]
+example: [fight-the-battle  restore-the-armies  the-units are [17 989 801 4485]]
 
 rearm-with: [a bonus][
     restore-the-armies
