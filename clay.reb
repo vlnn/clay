@@ -1,30 +1,33 @@
 Rebol [
-    Title:   "Glossary - a top-down dialect, v4"
-    Purpose: {A glossary is a block of definitions read top to bottom.
-              The first entry is the table of contents; every later entry
-              must define a phrase some earlier body has already used
-              (the use-before-define law). Phrase names are kebab-case
-              and bodies spell them exactly as defined, so every phrase
-              has one grep-able spelling. Argument specs may read as
-              sentence templates: [from an attacker to a defender]
-              declares attacker and defender. `example:` entries sit at
-              a phrase's first mention and run as tests after the
-              glossary loads. Words that no definition or primitive ever
-              answers are a compile-time error: an unfulfilled wish.
-              A glossary usually lives in its own file and is loaded
-              with:  glossary load %some.glossary}
+    Title:   "Clay - a top-down tablet language"
+    Purpose: {A .clay file is a tablet: one bounded page of definitions
+              read top to bottom. The first entry is the incipit; every
+              later entry must define a phrase some earlier body has
+              already used (the law: wish before define). Phrase names
+              are kebab-case and bodies spell them exactly as defined.
+              Argument specs may read as sentence templates:
+              [from an attacker to a defender] declares attacker and
+              defender. doc: entries document the definition just above
+              and surface through the host's native help. example:
+              entries sit at a phrase's first mention or definition.
+              Loading a tablet fires it in the kiln: every example runs,
+              and failures are cracks. clay/soft skips the firing while
+              a piece is still being shaped. Words that no definition or
+              primitive ever answers are a compile-time error: an
+              unfulfilled wish.
+              A tablet is loaded with:  clay load %some.clay}
 ]
 
 template-words: [the a an of to by in with from for at on some]
 example-links:  [is are]
 
-glossary-failures: 0
+cracks: 0
 
 template-args: function [spec][
     collect [foreach w spec [unless find template-words w [keep w]]]
 ]
 
-glossary-entries: func [defs /local name b1 b2 s][
+clay-entries: func [defs /local name b1 b2 s][
     collect [
         parse defs [some [
             set name set-word! (b2: none  s: none)
@@ -36,7 +39,7 @@ glossary-entries: func [defs /local name b1 b2 s][
     ]
 ]
 
-glossary-wishes: function [body locals wished][
+clay-wishes: function [body locals wished][
     walk: func [blk /local v w][
         forall blk [
             v: blk/1
@@ -67,11 +70,11 @@ glossary-wishes: function [body locals wished][
     walk body
 ]
 
-run-example: function [subject body ctx][
+fire-example: function [subject body ctx][
     got: none
     pos: any [find body 'is  find body 'are]
     unless pos [
-        print ajoin ["FAIL example (" subject "): no 'is'/'are' assertion"]
+        print ajoin ["CRACK (" subject "): no 'is'/'are' assertion"]
         return false
     ]
     left:  copy/part body pos
@@ -82,20 +85,31 @@ run-example: function [subject body ctx][
         [do bind/copy right ctx]
     case [
         error? get/any 'got [
-            print ajoin ["FAIL example (" subject "): " mold get/any 'got]
+            print ajoin ["CRACK (" subject "): " mold get/any 'got]
             false
         ]
         not equal? get/any 'got expect [
-            print ajoin ["FAIL example (" subject "): got " mold get/any 'got
+            print ajoin ["CRACK (" subject "): got " mold get/any 'got
                          ", expected " mold expect]
             false
         ]
-        true [print ajoin ["ok   example (" subject ")"]  true]
+        true [print ajoin ["ok   fired (" subject ")"]  true]
     ]
 ]
 
-glossary: function [defs [block!]][
-    entries: glossary-entries defs
+kiln: function [examples ctx][
+    flaws: 0
+    foreach [subject body] examples [
+        unless fire-example subject body ctx [flaws: flaws + 1]
+    ]
+    flaws
+]
+
+clay: function [
+    defs [block!]
+    /soft "shape only: skip the kiln, run no examples"
+][
+    entries: clay-entries defs
 
     table: collect [
         foreach [name argspec body] entries [
@@ -121,32 +135,33 @@ glossary: function [defs [block!]][
                 append/only all-locals none
             ]
             name = 'example [
-            subject: none
-            if all [prev  find body prev][subject: prev]
-            foreach v body [
-                if all [none? subject  word? v  find table v  not find defined v
-                        prev = select wish-origin v][
-                    subject: v]
-            ]
-            n0: length? wished
-            glossary-wishes body copy [] wished
-            foreach w skip wished n0 [append wish-origin reduce [w prev]]
-            append examples any [subject prev "..."]
-            append/only examples body
-            append/only all-locals none
+                subject: none
+                if all [prev  find body prev][subject: prev]
+                foreach v body [
+                    if all [none? subject  word? v  find table v
+                            not find defined v
+                            prev = select wish-origin v][
+                        subject: v]
+                ]
+                n0: length? wished
+                clay-wishes body copy [] wished
+                foreach w skip wished n0 [append wish-origin reduce [w prev]]
+                append examples any [subject prev "..."]
+                append/only examples body
+                append/only all-locals none
             ]
             true [
-            unless any [empty? defined  find wished name][
-                do make error! ajoin [
-                    "Glossary law: '" name "' is defined before anything wished for it"]
-            ]
-            append defined name
-            locals: template-args argspec
-            n0: length? wished
-            glossary-wishes body locals wished
-            foreach w skip wished n0 [append wish-origin reduce [w name]]
-            append/only all-locals locals
-            prev: name
+                unless any [empty? defined  find wished name][
+                    do make error! ajoin [
+                        "Clay law: '" name "' is defined before anything wished for it"]
+                ]
+                append defined name
+                locals: template-args argspec
+                n0: length? wished
+                clay-wishes body locals wished
+                foreach w skip wished n0 [append wish-origin reduce [w name]]
+                append/only all-locals locals
+                prev: name
             ]
         ]
     ]
@@ -164,12 +179,12 @@ glossary: function [defs [block!]][
         if any [name = 'example  string? body][continue]
         msg: ajoin ["in '" name "':"]
         wrapped: compose/only [
-            set/any 'glossary-err try (bind/copy body ctx)
-            either error? get/any 'glossary-err [
-                print [(msg) mold disarm-safe get/any 'glossary-err]
-                do get/any 'glossary-err
+            set/any 'clay-err try (bind/copy body ctx)
+            either error? get/any 'clay-err [
+                print [(msg) mold cracked-open get/any 'clay-err]
+                do get/any 'clay-err
             ][
-                get/any 'glossary-err
+                get/any 'clay-err
             ]
         ]
         spec: template-args argspec
@@ -179,15 +194,11 @@ glossary: function [defs [block!]][
         set in ctx name func spec wrapped
     ]
 
-    fails: 0
-    foreach [subject body] examples [
-        unless run-example subject body ctx [fails: fails + 1]
-    ]
-    set 'glossary-failures fails
+    set 'cracks either soft [0][kiln examples ctx]
     ctx
 ]
 
-disarm-safe: func [e][reduce [e/id e/arg1]]
+cracked-open: func [e][reduce [e/id e/arg1]]
 
 ;; ------------------------------------------------- ordering & small helpers
 

@@ -1,5 +1,5 @@
-; AoC 2018 day 24, as a glossary.
-; Read top to bottom: every phrase is used before it is defined,
+; AoC 2018 day 24, as a clay tablet.
+; The law: every phrase is used before it is defined,
 ; and each example sits at its subject's first mention.
 ; Primitives from the host: groups, originals, ranked, pick-max, whole.
 

@@ -2,7 +2,7 @@ Rebol [Title: "Glossary day 24 - tests (v2)"]
 
 do %combat.reb
 
-failures: glossary-failures
+failures: cracks
 check: func [ok msg][
     print either ok [ajoin ["ok   " msg]][
         failures: failures + 1

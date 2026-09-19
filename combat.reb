@@ -1,8 +1,8 @@
 Rebol [
-    Title: "AoC 2018 day 24 - host driver for combat.glossary"
+    Title: "AoC 2018 day 24 - host driver for combat.clay"
 ]
 
-do %glossary.reb
+do %clay.reb
 
 groups:    copy []
 originals: copy []
@@ -38,4 +38,4 @@ armies [
     4485 units 2961 hp [immune [radiation] weak [fire cold]]        attack 12   slashing    initiative 4
 ]
 
-day24: glossary load %combat.glossary
+day24: clay load %combat.clay
